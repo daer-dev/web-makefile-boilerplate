@@ -1,8 +1,8 @@
-# Intro
+# Web Makefile Boilerplate
 
-This repo intends to be a doc of reference for writing web development related Makefiles. It has commands related to topics such as Docker, Kubernetes, Heroku or Ruby on Rails, and some generic ones to show help or check vars existence.
+This repo intends to be a doc of reference for writing web development related Make files. It has commands related to topics such as Docker, Kubernetes, Heroku or Ruby on Rails, and some generic ones to show help or check vars existence.
 
-Feel free to fork it or just copy the part that suits you best!
+I've preferred to compile it all in a single file so anybody can keep the combination that suits they best.
 
 Any contribution via PR is welcome!
 

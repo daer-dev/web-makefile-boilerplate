@@ -1,27 +1,37 @@
 SHELL:=/bin/bash
 
+#############################
+# GENERIC MAKEFILE COMMANDS #
+#############################
+
 .DEFAULT_GOAL:=help
 
-# Commands to be shown when running "make help".
-.PHONY: help install install-dev start start-dev prune conn web gems test-setup test
-.PHONY: heroku-login heroku-create-app heroku-send-vars heroku-push heroku-deploy heroku-restart heroku-open heroku-log heroku-bash heroku-vars
-.PHONY: docker-push-images k8s-start k8s-create k8s-create-secrets k8s-setup
+.PHONY: help
 
-ENV_FILE?=.env.example
-DOCKER_COMPOSE_OPTIONS?=-f docker-compose.yml
-DOCKER_COMPOSE_OPTIONS_DEV=-f docker-compose.yml -f docker-compose.dev.yml
-
-check-var-%: ## Checks if variable exists.
+check-var-%: ## Checks if a variable exists (using it like "| check-var-VAR_NAME").
 	@: $(if $(value $*),,$(error $* is undefined))
 
 help:  ## Displays this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
+##########
+# DOCKER #
+##########
+
+.PHONY: install install-dev start start-dev prune conn web docker-push-images
+
+ENV_FILE?=.env.example
+DOCKER_COMPOSE_OPTIONS?=-f docker-compose.yml
+DOCKER_COMPOSE_OPTIONS_DEV=-f docker-compose.yml -f docker-compose.dev.yml
+
+# Remove the entrypoint part if it doesn't apply to your project (it is forced to not throw an error if the file doesn't exists anyway).
 install: ## Builds the enviroment with the settings specified in the env var "ENV_FILE" and options in "DOCKER_COMPOSE_OPTIONS".
 	$(info Building environment with vars defined in "$(ENV_FILE)" and "$(DOCKER_COMPOSE_OPTIONS)" options...)
-	@cp -f $(ENV_FILE) .env && \
+	@chmod 777 ./docker/entrypoint.sh  || true && \
+		cp -f $(ENV_FILE) .env && \
 		docker-compose $(DOCKER_COMPOSE_OPTIONS) build
 
+# To be used only if you have a development specific config.
 install-dev:  ## Builds the development enviroment.
 	@ENV_FILE=.env.dev.example DOCKER_COMPOSE_OPTIONS="$(DOCKER_COMPOSE_OPTIONS_DEV)" make install
 
@@ -32,9 +42,10 @@ start:| check-var-DOCKER_COMPOSE_OPTIONS ## Starts the server with Docker.
 start-dev:  ## Builds the development enviroment.
 	@DOCKER_COMPOSE_OPTIONS="$(DOCKER_COMPOSE_OPTIONS_DEV)" make start
 
-prune:| check-var-LABEL ## Deletes all Docker's containers, networks, volumes, images and cache with the label specified in the env var "LABEL".
+# Write your project name in the label filter to avoid deleting other projects' files by mistake.
+prune: ## Deletes all Docker's containers, networks, volumes, images and cache with the label specified in the env var "LABEL".
 	$(info Removing all Docker related info...)
-	@docker system prune -af --volumes --filter label=$(LABEL)
+	@docker system prune -af --volumes --filter label=your_project_name
 
 conn:| check-var-CONTAINER_NAME check-var-DOCKER_COMPOSE_OPTIONS ## Connects to the container specified in the environment var "CONTAINER_NAME".
 	$(info Connecting to "$(CONTAINER_NAME)" container...)
@@ -43,17 +54,15 @@ conn:| check-var-CONTAINER_NAME check-var-DOCKER_COMPOSE_OPTIONS ## Connects to 
 web:  ## Connects to the web container.
 	@CONTAINER_NAME=web make conn
 
-gems:  ## Checks and installs new gems.
-	$(info Checking and installing gems...)
-	@docker-compose run --rm web bundle check || bundle install
+docker-push-images:| check-var-DOCKERHUB_PREFIX ## Pushes both Redis and Web images to DockerHub. The "DOCKERHUB_PREFIX" arg should be in "user_in_dockerhub/any_prefix-" format.
+	$(info Pushing web & redis images to DockerHub...)
+	@./docker/scripts/push-docker-images.sh $(DOCKERHUB_PREFIX)
 
-test-setup: install ## Installs and prepares the test suite environment.
-	$(info Setting up the test environment...)
-	@docker-compose run --rm web bundle exec rails db:drop db:create db:migrate RAILS_ENV=test
+##########
+# HEROKU #
+##########
 
-test: ## Starts the test runner.
-	$(info Running tests...)
-	@docker-compose run --rm web bin/rspec
+.PHONY: heroku-login heroku-create-app heroku-send-vars heroku-push heroku-deploy heroku-restart heroku-open heroku-log heroku-bash heroku-vars
 
 heroku-login: ## Identifies the user into Heroku.
 	$(info Connecting to Heroku...)
@@ -96,9 +105,11 @@ heroku-vars:| check-var-HEROKU_PROJECT_NAME ## Returns the value of every enviro
 	$(info Opening log...)
 	@heroku config -a $(HEROKU_PROJECT_NAME)
 
-docker-push-images:| check-var-DOCKERHUB_PREFIX ## Pushes both Redis and Web images to DockerHub. The "DOCKERHUB_PREFIX" arg should be in "user_in_dockerhub/any_prefix-" format.
-	$(info Pushing web & redis images to DockerHub...)
-	@./docker/scripts/push-docker-images.sh $(DOCKERHUB_PREFIX)
+##############
+# KUBERNETES #
+##############
+
+.PHONY: k8s-start k8s-create k8s-create-secrets k8s-setup
 
 k8s-start: ## Starts Minikube with Docker.
 	$(info Starting Minikube...)
@@ -113,3 +124,31 @@ k8s-create-secrets: ## Creates Kubernetes secrets with the content of the ".env"
 	@kubectl create secret generic secrets --from-env-file=.env
 
 k8s-setup: k8s-start k8s-create k8s-create-secrets ## Starts Minikube and creates Kubernetes objects and secrets.
+
+#################
+# RUBY ON RAILS #
+#################
+
+.PHONY: rails-gems rails-test-setup rails-test
+
+rails-gems:  ## Checks and installs new gems.
+	$(info Checking and installing gems...)
+	@docker-compose run --rm web bundle check || bundle install
+
+rails-test-setup: install ## Installs and prepares the test suite environment.
+	$(info Setting up the test environment...)
+	@docker-compose run --rm web bundle exec rails db:drop db:create db:migrate RAILS_ENV=test
+
+rails-test: ## Starts the test runner.
+	$(info Running tests...)
+	@docker-compose run --rm web bin/rspec
+
+###########
+# PHOENIX #
+###########
+
+.PHONY: phoenix-test
+
+phoenix-test: ## Starts the test runner.
+	$(info Running tests...)
+	@docker-compose run web mix test
