@@ -54,9 +54,10 @@ conn:| check-var-CONTAINER_NAME check-var-DOCKER_COMPOSE_OPTIONS ## Connects to 
 web:  ## Connects to the web container.
 	@CONTAINER_NAME=web make conn
 
+# Edit the executable file to specify the route of your images.
 docker-push-images:| check-var-DOCKERHUB_PREFIX ## Pushes both Redis and Web images to DockerHub. The "DOCKERHUB_PREFIX" arg should be in "user_in_dockerhub/any_prefix-" format.
 	$(info Pushing web & redis images to DockerHub...)
-	@./docker/scripts/push-docker-images.sh $(DOCKERHUB_PREFIX)
+	@./docker/push-images.sh $(DOCKERHUB_PREFIX)
 
 ##########
 # HEROKU #
