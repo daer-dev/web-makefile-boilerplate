@@ -153,3 +153,13 @@ rails-test: ## Starts the test runner.
 phoenix-test: ## Starts the test runner.
 	$(info Running tests...)
 	@docker-compose run web mix test
+
+#################
+# NODEJS #
+#################
+
+.PHONY: node-npm
+
+node-npm:  ## Checks and install new NPM packages.
+	$(info Checking and installing NPM packages...)
+	@docker-compose run --rm web npm install
