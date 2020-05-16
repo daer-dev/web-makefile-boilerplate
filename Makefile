@@ -158,8 +158,8 @@ phoenix-test: ## Starts the test runner.
 # NODEJS #
 #################
 
-.PHONY: node-npm
+.PHONY: npm-install
 
-node-npm:  ## Checks and install new NPM packages.
+npm-install:  ## Checks and install new NPM packages.
 	$(info Checking and installing NPM packages...)
 	@docker-compose run --rm web npm install
